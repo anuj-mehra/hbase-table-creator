@@ -2,29 +2,35 @@ package com.poc.hbasetables.utils
 
 import com.poc.hbasetables.repository.HBaseAdminRepository
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.{HColumnDescriptor, HTableDescriptor}
+import org.apache.hadoop.hbase.{HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.hadoop.hbase.regionserver.BloomType
 
-class HBaseTableServiceImpl(hbaseConf: Configuration) {
+class HBaseTableServiceImpl(hbaseAdminRepository: HBaseAdminRepository) {
 
-  private val hbaseAdminRepository = new HBaseAdminRepository(hbaseConf)
+  //private
 
   def createOrUpdateTable(tableDesc: TableDescription): Unit = {
 
-    val tableExists = hbaseAdminRepository.isTableExists(tableDesc)
-    tableExists match {
-      case true =>
-        if(tableDesc.modifyTableIfExists.getOrElse(false)){
-          val tableDescriptor: HTableDescriptor = this.getTableDescriptor(tableDesc)
-          hbaseAdminRepository.modifyTable(tableDescriptor)
-        }
-      case false =>
-        val tableDescriptor = this.getTableDescriptor(tableDesc)
-        if(Option(tableDesc.splitSize).isDefined){
-          hbaseAdminRepository.createTable(tableDescriptor, tableDesc.splitSize.toInt)
-        }else{
-          hbaseAdminRepository.createTable(tableDescriptor)
-        }
+    try{
+      val tableExists = hbaseAdminRepository.isTableExists(tableDesc)
+      tableExists match {
+        case true =>
+          if(tableDesc.modifyTableIfExists.getOrElse(false)){
+            val tableDescriptor: HTableDescriptor = this.getTableDescriptor(tableDesc)
+            val tableName: TableName = hbaseAdminRepository.getTableName(tableDesc)
+            hbaseAdminRepository.modifyTable(tableName, tableDescriptor)
+          }
+        case false =>
+          val tableDescriptor = this.getTableDescriptor(tableDesc)
+          if(Option(tableDesc.splitSize).isDefined){
+            hbaseAdminRepository.createTable(tableDescriptor, tableDesc.splitSize.toInt)
+          }else{
+            hbaseAdminRepository.createTable(tableDescriptor)
+          }
+      }
+    }finally{
+      hbaseAdminRepository.getConnection.getAdmin.close()
+      hbaseAdminRepository.getConnection.close()
     }
 
   }
@@ -46,5 +52,8 @@ class HBaseTableServiceImpl(hbaseConf: Configuration) {
     tableDescriptor
   }
 
+  def doMajorCompaction(hbaseTableName: String, hbaseNamespace: String): Unit = {
+    hbaseAdminRepository.doMajorCompact(hbaseNamespace, hbaseTableName)
+  }
 
 }
